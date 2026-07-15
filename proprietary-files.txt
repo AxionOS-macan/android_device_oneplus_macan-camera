@@ -224,8 +224,11 @@ system_ext/lib64/libpenguin.so:vendor/lib64/libpenguin.so
 system_ext/lib64/libHeifEncoderWrapper.so
 system_ext/lib64/libHeifWinBufExchg-jni.so;DISABLE_CHECKELF
 system_ext/lib64/libNativeWinBuffExchange.so
+system_ext/lib64/liboplus_heifconverter.so;DISABLE_DEPS;DISABLE_CHECKELF
+system_ext/lib64/liboplusavenhancements.so;DISABLE_DEPS;DISABLE_CHECKELF
 system_ext/lib64/liboplusgui_jni.so;DISABLE_CHECKELF
 system_ext/lib64/liboplusheifwriter.so
+system_ext/lib64/liboplussfplugin_ccodec.so;DISABLE_DEPS;DISABLE_CHECKELF
 system/framework/oplus-services.jar;EXTRACT_ONLY
 system_ext/etc/permissions/vendor-oplus-hardware-cryptoeng.xml
 system_ext/framework/vendor.oplus.hardware.cryptoeng-V1-java.jar
