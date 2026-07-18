@@ -172,69 +172,149 @@ def blob_fixup_opluscamera_blur_seginit_guard(ctx, file, file_path, *args, tmp_d
                 return smali, data
         return None, None
 
-    process_smali = next(Path(tmp_dir).glob('smali*/ub/b.smali'), None)
-    if process_smali is not None:
-        data = process_smali.read_text(encoding='utf-8', errors='ignore')
-    else:
-        process_smali, data = find_smali(
-            '/odm/etc/camera/singleblur/personseg.bin',
-            'Lcom/oplus/ocs/camera/OplusBlurPreviewHelper;->segInit',
-            'sput-object',
-        )
-    if process_smali is None:
-        return
-    if '/odm/etc/camera/singleblur/personseg.bin' not in data:
-        return
+    def find_preferred_smali(preferred_paths, *needles):
+        for preferred_path in preferred_paths:
+            for smali in Path(tmp_dir).glob(preferred_path):
+                data = smali.read_text(encoding='utf-8', errors='ignore')
+                if all(needle in data for needle in needles):
+                    return smali, data
+        return find_smali(*needles)
 
-    fixed, count = re.subn(
-        r'(?s)(invoke-virtual/range \{v1 \.\. v7\}, Lcom/oplus/ocs/camera/OplusBlurPreviewHelper;->segInit\(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;II\)\[I.*?'
-        r'move-result-object v0.*?'
-        r'sput-object v0, L[^;]+;->w:\[I)',
-        r'\1'
-        '\n\n'
-        '    if-nez v0, :cond_codex_blur_seginit_ok\n'
-        '\n'
-        '    monitor-exit v10\n'
-        '\n'
-        '    return v12\n'
-        '\n'
-        '    :cond_codex_blur_seginit_ok',
-        data,
-        count=1,
+    process_smali, data = find_preferred_smali(
+        ('smali*/pb/b.smali', 'smali*/ub/b.smali'),
+        '/odm/etc/camera/singleblur/personseg.bin',
+        'Lcom/oplus/ocs/camera/OplusBlurPreviewHelper;->segInit',
+        'sput-object',
     )
-    if count == 1:
+    if process_smali is None:
+        raise ValueError('OplusCamera blur process segInit smali not found')
+
+    if ':cond_codex_blur_seginit_ok' not in data:
+        fixed, count = re.subn(
+            r'(?s)(invoke-virtual/range \{v1 \.\. v7\}, Lcom/oplus/ocs/camera/OplusBlurPreviewHelper;->segInit\(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;II\)\[I.*?'
+            r'move-result-object v0.*?'
+            r'sput-object v0, L[^;]+;->[vw]:\[I)',
+            r'\1'
+            '\n\n'
+            '    if-nez v0, :cond_codex_blur_seginit_ok\n'
+            '\n'
+            '    monitor-exit v10\n'
+            '\n'
+            '    return v12\n'
+            '\n'
+            '    :cond_codex_blur_seginit_ok',
+            data,
+            count=1,
+        )
+        if count != 1:
+            raise ValueError(
+                f'OplusCamera blur process segInit guard patch point not found in {process_smali}'
+            )
         process_smali.write_text(fixed, encoding='utf-8')
 
-    texture_smali = next(Path(tmp_dir).glob('smali*/wb/k.smali'), None)
-    if texture_smali is not None:
-        data = texture_smali.read_text(encoding='utf-8', errors='ignore')
-    else:
-        texture_smali, data = find_smali(
-            'initSegForSizeChange, segInit, cost: ',
-            'Lcom/oplus/ocs/camera/OplusBlurPreviewHelper;->segInit',
-            'sput-object',
-        )
+    texture_smali, data = find_preferred_smali(
+        ('smali*/rb/h.smali', 'smali*/wb/k.smali'),
+        'initSegForSizeChange, segInit, cost: ',
+        'Lcom/oplus/ocs/camera/OplusBlurPreviewHelper;->segInit',
+        'sput-object',
+    )
     if texture_smali is None:
+        raise ValueError('OplusCamera blur texture segInit smali not found')
+
+    if ':cond_codex_blur_size_seginit_ok' not in data:
+        fixed, count = re.subn(
+            r'(?s)(invoke-virtual/range \{v3 \.\. v9\}, Lcom/oplus/ocs/camera/OplusBlurPreviewHelper;->segInit\(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;II\)\[I.*?'
+            r'move-result-object p0.*?'
+            r'sput-object p0, L[^;]+;->[vw]:\[I)',
+            r'\1'
+            '\n\n'
+            '    if-nez p0, :cond_codex_blur_size_seginit_ok\n'
+            '\n'
+            '    return-void\n'
+            '\n'
+            '    :cond_codex_blur_size_seginit_ok',
+            data,
+            count=1,
+        )
+        if count != 1:
+            raise ValueError(
+                f'OplusCamera blur texture segInit guard patch point not found in {texture_smali}'
+            )
+        texture_smali.write_text(fixed, encoding='utf-8')
+
+
+    lut_smali, data = find_preferred_smali(
+        ('smali*/rb/h.smali', 'smali*/rb/e.smali'),
+        '/odm/etc/camera/singleblur/singlut_portrait.png',
+        '/odm/etc/camera/singleblur/singlut_background.png',
+        'Landroid/graphics/BitmapFactory;->decodeFile',
+        'Lr7/z2;->l(Landroid/graphics/Bitmap;)I',
+    )
+    if lut_smali is None:
         return
-    if 'initSegForSizeChange, segInit, cost: ' not in data:
+    if ':cond_codex_blur_portrait_lut_ok' in data:
         return
 
-    fixed, count = re.subn(
-        r'(?s)(invoke-virtual/range \{v3 \.\. v9\}, Lcom/oplus/ocs/camera/OplusBlurPreviewHelper;->segInit\(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;II\)\[I.*?'
-        r'move-result-object p0.*?'
-        r'sput-object p0, L[^;]+;->w:\[I)',
-        r'\1'
-        '\n\n'
-        '    if-nez p0, :cond_codex_blur_size_seginit_ok\n'
-        '\n'
-        '    return-void\n'
-        '\n'
-        '    :cond_codex_blur_size_seginit_ok',
-        data,
+    method_pattern = re.compile(
+        r'(?ms)^\.method public final createEngine\(Lcom/oplus/camera/filter/texturepreview/TexturePreviewRequest;\)V\n.*?^\.end method'
+    )
+    method_match = method_pattern.search(data)
+    if method_match is None:
+        raise ValueError(f'OplusCamera blur LUT createEngine method not found in {lut_smali}')
+
+    method = method_match.group(0)
+    fixed_method = method
+    fixed_method, portrait_count = re.subn(
+        r'(?s)(const-string v0, "/odm/etc/camera/singleblur/singlut_portrait\.png"\n\n'
+        r'(?:    \.line \d+\n)+'
+        r'    invoke-static \{v0\}, Landroid/graphics/BitmapFactory;->decodeFile\(Ljava/lang/String;\)Landroid/graphics/Bitmap;\n\n'
+        r'(?:    \.line \d+\n)+'
+        r'    move-result-object v0\n)(\n'
+        r'(?:    \.line \d+\n)+'
+        r'    invoke-static \{v0\}, Lr7/z2;->l\(Landroid/graphics/Bitmap;\)I\n\n'
+        r'(?:    \.line \d+\n)+'
+        r'    move-result v0\n)',
+        r'\1\n'
+        r'    if-nez v0, :cond_codex_blur_portrait_lut_ok\n'
+        r'\n'
+        r'    const/4 v0, -0x1\n'
+        r'\n'
+        r'    goto :goto_codex_blur_portrait_lut_done\n'
+        r'\n'
+        r'    :cond_codex_blur_portrait_lut_ok\n'
+        r'\2\n'
+        r'    :goto_codex_blur_portrait_lut_done\n',
+        fixed_method,
         count=1,
     )
-    if count == 1:
-        texture_smali.write_text(fixed, encoding='utf-8')
+    fixed_method, background_count = re.subn(
+        r'(?s)(const-string v0, "/odm/etc/camera/singleblur/singlut_background\.png"\n\n'
+        r'(?:    \.line \d+\n)+'
+        r'    invoke-static \{v0\}, Landroid/graphics/BitmapFactory;->decodeFile\(Ljava/lang/String;\)Landroid/graphics/Bitmap;\n\n'
+        r'(?:    \.line \d+\n)+'
+        r'    move-result-object v0\n)(\n'
+        r'(?:    \.line \d+\n)+'
+        r'    invoke-static \{v0\}, Lr7/z2;->l\(Landroid/graphics/Bitmap;\)I\n\n'
+        r'(?:    \.line \d+\n)+'
+        r'    move-result v0\n)',
+        r'\1\n'
+        r'    if-nez v0, :cond_codex_blur_background_lut_ok\n'
+        r'\n'
+        r'    const/4 v0, -0x1\n'
+        r'\n'
+        r'    goto :goto_codex_blur_background_lut_done\n'
+        r'\n'
+        r'    :cond_codex_blur_background_lut_ok\n'
+        r'\2\n'
+        r'    :goto_codex_blur_background_lut_done\n',
+        fixed_method,
+        count=1,
+    )
+    if portrait_count != 1 or background_count != 1:
+        raise ValueError(f'OplusCamera blur LUT guard patch point not found in {lut_smali}')
+
+    fixed = data[:method_match.start()] + fixed_method + data[method_match.end():]
+    lut_smali.write_text(fixed, encoding='utf-8')
 
 
 def blob_fixup_opluscamera_third_party_gallery(ctx, file, file_path, *args, tmp_dir=None, **kwargs):
@@ -268,6 +348,31 @@ def blob_fixup_opluscamera_third_party_gallery(ctx, file, file_path, *args, tmp_
         data,
         count=1,
     )
+    if availability_count != 1:
+        availability_pattern = (
+            r'(invoke-static \{\}, Lcom/oplus/camera/util/Util;->F\(\)V\n'
+            r'\n'
+            r'(?:    \.line \d+\n)+'
+            r'    iget-object (?P<gallery_check_reg>v\d+), v8, Lcom/oplus/camera/helper/GalleryHelper;->a:Landroid/app/Activity;\n'
+            r'\n'
+            r'(?:    \.line \d+\n)+'
+            r'    invoke-static \{(?P=gallery_check_reg)\}, Lcom/oplus/camera/util/Util;->v0\(Landroid/app/Activity;\)Z\n'
+            r'\n'
+            r'(?:    \.line \d+\n)+'
+            r'    move-result (?P=gallery_check_reg)\n'
+            r'\n'
+            r'(?:    \.line \d+\n)+'
+            r'    const/4 v11, 0x0\n'
+            r'\n'
+            r'(?:    \.line \d+\n)+)'
+            r'    if-nez (?P=gallery_check_reg), :cond_0\n'
+        )
+        data, availability_count = re.subn(
+            availability_pattern,
+            r'\1    goto :cond_0\n',
+            data,
+            count=1,
+        )
     if availability_count != 1:
         raise ValueError('OplusCamera gallery availability gate patch point not found')
 
