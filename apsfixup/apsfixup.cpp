@@ -48,9 +48,12 @@
 #include <cinttypes>
 #include <cstring>
 #include <cstdio>
+#include <map>
+#include <string>
 #include <unistd.h>
 #include <pthread.h>
 #include <sys/mman.h>
+#include <vector>
 #include <link.h>
 
 #define LOG_TAG "apsfixup"
@@ -67,7 +70,17 @@ static constexpr uintptr_t COPYMETA_GOT_OFF  = 0x68b068;  // libAlgoProcess.so A
 static constexpr uintptr_t COPYMETA_FUNC_OFF = 0x293120;  // libAlgoProcess.so APSMetadata::copyMetadata body
 static constexpr const char* LIB_PROCESS   = "libAlgoProcess.so";
 static constexpr const char* LIB_INTERFACE = "libAlgoInterface.so";
+static constexpr const char* LIB_APSCLIENT_CMD = "libAPSClient-cmd-jni.so";
+static constexpr const char* LIB_HEIF_WRAPPER = "libHeifEncoderWrapper.so";
 static constexpr const char* ARC_SYMBOL    = "ARC_Turbo_RAW_Process";
+
+// libAPSClient-cmd-jni.so actionSetHeifProcess JUMP_SLOT. Used only for
+// diagnostics around the Oplus HEIF path; wrapper does not mutate params.
+static constexpr uintptr_t HEIFPROCESS_GOT_OFF  = 0x0fc700;
+static constexpr uintptr_t HEIFPROCESS_FUNC_OFF = 0x07f3d8;
+
+static constexpr uintptr_t WRITECOLORFD_GOT_OFF  = 0x4368;
+static constexpr uintptr_t WRITECOLORFD_FUNC_OFF = 0x3174;
 
 // -- doc 28 Family C-2: super-night ArcSoft engine (dlsym'd by libAlgoInterface @0x1770e8) --
 // Same Gralloc5 non-contiguous P010 garbage-plane root as ARC_Turbo_RAW_Process; repair its
@@ -114,12 +127,19 @@ static strlen_fn_t g_real_strlen = nullptr;
 using ogltone_fn_t = int (*)(void*);
 static ogltone_fn_t g_real_ogltone = nullptr;
 static dlsym_fn_t   g_real_algoproc_dlsym = nullptr;
+using str_vec_map_t = std::map<std::string, std::vector<std::string>>;
+using heifprocess_fn_t = int (*)(str_vec_map_t*);
+static heifprocess_fn_t g_real_heifprocess = nullptr;
+using writecolorfd_fn_t = int (*)(int);
+static writecolorfd_fn_t g_real_writecolorfd = nullptr;
 
 static bool g_done_p010          = false;
 static bool g_done_dlsym         = false;
 static bool g_done_copymeta      = false;
 static bool g_done_strlen        = false;
 static bool g_done_algoproc_dlsym = false;
+static bool g_done_heifprocess   = false;
+static bool g_done_writecolorfd   = false;
 
 // -- /proc/self/maps range lookup: the mapping [base,base+size) containing addr -------------
 static bool range_of(uint64_t addr, uint64_t* base, uint64_t* size) {
@@ -418,6 +438,96 @@ static void* wrap_algoproc_dlsym(void* handle, const char* symbol) {
     return res;
 }
 
+static const char* first_value(const str_vec_map_t& params, const char* key) {
+    auto it = params.find(key);
+    if (it == params.end() || it->second.empty()) return "";
+    return it->second[0].c_str();
+}
+
+static void set_alias(str_vec_map_t* params, const char* key, const std::string& value) {
+    if (!params || value.empty()) return;
+    (*params)[key] = {value};
+}
+
+static void promote_result_pairs(str_vec_map_t* params) {
+    if (!params) return;
+    auto result = params->find("result_STRING_BASIC_ARRAYVALUE_");
+    if (result != params->end()) {
+        const auto& values = result->second;
+        for (size_t i = 0; i + 1 < values.size(); i += 2) {
+            const std::string& key = values[i];
+            const std::string& value = values[i + 1];
+            if (key == "resultinfo_width" || key == "resultinfo_height" ||
+                key == "resultinfo_stride" || key == "resultinfo_scanline" ||
+                key == "resultinfo_rotation") {
+                set_alias(params, key.c_str(), value);
+            }
+        }
+    }
+
+    const char* width = first_value(*params, "resultinfo_width");
+    const char* height = first_value(*params, "resultinfo_height");
+    const char* stride = first_value(*params, "resultinfo_stride");
+    const char* scanline = first_value(*params, "resultinfo_scanline");
+    const char* rotation = first_value(*params, "resultinfo_rotation");
+    const char* planes_width = first_value(*params, "exifData_bufferPlanesWidth_INT_BASIC_");
+    const char* planes_height = first_value(*params, "exifData_bufferPlanesHeight_INT_BASIC_");
+    const char* planes_rowstride = first_value(*params, "exifData_bufferPlanesRowstride_INT_BASIC_");
+    const char* planes_colstride = first_value(*params, "exifData_bufferPlanesColstride_INT_BASIC_");
+    const char* planes_data = first_value(*params, "exifData_bufferPlanesData_BYTE_BASIC_ARRAY_");
+    const char* fd = first_value(*params, "exifData_callBackImgHeifFd_INT_BASIC_");
+    const char* format = first_value(*params, "exifData_heifEncodeFormat_INT_BASIC_");
+
+    set_alias(params, "width", width);
+    set_alias(params, "height", height);
+    set_alias(params, "stride", stride);
+    set_alias(params, "scanline", scanline);
+    set_alias(params, "rotation", rotation);
+    set_alias(params, "resultinfo_width_INT_BASIC_", width);
+    set_alias(params, "resultinfo_height_INT_BASIC_", height);
+    set_alias(params, "resultinfo_stride_INT_BASIC_", stride);
+    set_alias(params, "resultinfo_scanline_INT_BASIC_", scanline);
+    set_alias(params, "resultinfo_rotation_INT_BASIC_", rotation);
+
+    set_alias(params, "bufferPlanesWidth", planes_width);
+    set_alias(params, "bufferPlanesHeight", planes_height);
+    set_alias(params, "bufferPlanesRowstride", planes_rowstride);
+    set_alias(params, "bufferPlanesColstride", planes_colstride);
+    set_alias(params, "bufferPlanesData", planes_data);
+    set_alias(params, "bufferPlanesWidth_INT_BASIC_", planes_width);
+    set_alias(params, "bufferPlanesHeight_INT_BASIC_", planes_height);
+    set_alias(params, "bufferPlanesRowstride_INT_BASIC_", planes_rowstride);
+    set_alias(params, "bufferPlanesColstride_INT_BASIC_", planes_colstride);
+    set_alias(params, "bufferPlanesData_BYTE_BASIC_ARRAY_", planes_data);
+    set_alias(params, "exifData_bufferPlanesWidth_INT_", planes_width);
+    set_alias(params, "exifData_bufferPlanesHeight_INT_", planes_height);
+    set_alias(params, "exifData_bufferPlanesRowstride_INT_", planes_rowstride);
+    set_alias(params, "exifData_bufferPlanesColstride_INT_", planes_colstride);
+    set_alias(params, "exifData_bufferPlanesData_BYTEARRAY_", planes_data);
+    set_alias(params, "callBackImgHeifFd", fd);
+    set_alias(params, "callBackImgHeifFd_INT_BASIC_", fd);
+    set_alias(params, "exifData_callBackImgHeifFd_INT_", fd);
+    set_alias(params, "callBackImgRotation", rotation);
+    set_alias(params, "callBackImgRotation_INT_BASIC_", rotation);
+    set_alias(params, "exifData_callBackImgRotation_INT_", rotation);
+    set_alias(params, "heifEncodeFormat", format);
+    set_alias(params, "heifEncodeFormat_INT_BASIC_", format);
+    set_alias(params, "exifData_heifEncodeFormat_INT_", format);
+}
+
+static int wrap_writecolorfd(int fd) {
+    ALOGI("skip writeColorProfileFd(%d): leave OplusHeifWriter output untouched", fd);
+    return 0;
+}
+
+static int wrap_heifprocess(str_vec_map_t* params) {
+    if (!params) return g_real_heifprocess(params);
+
+    str_vec_map_t patched = *params;
+    promote_result_pairs(&patched);
+    return g_real_heifprocess(&patched);
+}
+
 // -- locate the load bias of a named DT_NEEDED object via dl_iterate_phdr -------------------
 struct find_ctx { const char* name; uintptr_t base; };
 static int find_cb(struct dl_phdr_info* info, size_t, void* data) {
@@ -506,8 +616,40 @@ static bool try_install() {
             }
         }
     }
+    if (!g_done_writecolorfd) {
+        uintptr_t base = module_base(LIB_HEIF_WRAPPER);
+        if (base) {
+            void** slot = (void**)(base + WRITECOLORFD_GOT_OFF);
+            void* expected_real = (void*)(base + WRITECOLORFD_FUNC_OFF);
+            if (*slot == expected_real) {
+                void* old = nullptr;
+                if (got_redirect(base + WRITECOLORFD_GOT_OFF, (void*)wrap_writecolorfd, &old)) {
+                    g_real_writecolorfd = (writecolorfd_fn_t)expected_real;
+                    g_done_writecolorfd = true;
+                    ALOGI("hooked writeColorProfileFd GOT @%p (real=%p)",
+                          (void*)(base + WRITECOLORFD_GOT_OFF), expected_real);
+                }
+            }
+        }
+    }
+    if (!g_done_heifprocess) {
+        uintptr_t base = module_base(LIB_APSCLIENT_CMD);
+        if (base) {
+            void** slot = (void**)(base + HEIFPROCESS_GOT_OFF);
+            void* expected_real = (void*)(base + HEIFPROCESS_FUNC_OFF);
+            if (*slot == expected_real) {
+                void* old = nullptr;
+                if (got_redirect(base + HEIFPROCESS_GOT_OFF, (void*)wrap_heifprocess, &old)) {
+                    g_real_heifprocess = (heifprocess_fn_t)expected_real;
+                    g_done_heifprocess = true;
+                    ALOGI("hooked actionSetHeifProcess GOT @%p (real=%p)",
+                          (void*)(base + HEIFPROCESS_GOT_OFF), expected_real);
+                }
+            }
+        }
+    }
     return g_done_p010 && g_done_dlsym && g_done_copymeta &&
-           g_done_strlen && g_done_algoproc_dlsym;
+           g_done_strlen && g_done_algoproc_dlsym && g_done_heifprocess && g_done_writecolorfd;
 }
 
 // Fallback poller: libAlgoInterface may load after us (dlopen'd post-cap). Retry every 25ms
