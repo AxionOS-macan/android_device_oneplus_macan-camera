@@ -681,7 +681,7 @@ def blob_fixup_opluscamera_third_party_gallery(ctx, file, file_path, *args, tmp_
             r'    move-result (?P=gallery_check_reg)\n'
             r'\n'
             r'(?:    \.line \d+\n)+'
-            r'    const/4 v11, 0x0\n'
+            r'    const/4 (?P<gallery_zero_reg>v\d+), 0x0\n'
             r'\n'
             r'(?:    \.line \d+\n)+)'
             r'    if-nez (?P=gallery_check_reg), :cond_0\n'
