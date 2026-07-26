@@ -37,8 +37,7 @@ PRODUCT_PACKAGES += \
     libQnnSystem_gallery_system_ext \
     libNativeWinBuffExchange_camera_app_lib \
     libHeifEncoderWrapper_camera_app_lib \
-    libHeifWinBufExchg-jni \
-    libapsfixup
+    libHeifWinBufExchg-jni
 
 # Properties
 PRODUCT_PRODUCT_PROPERTIES += \

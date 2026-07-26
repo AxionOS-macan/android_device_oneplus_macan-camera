@@ -20,10 +20,19 @@ from extract_utils.main import (
     ExtractUtilsModule,
 )
 from extract_utils.utils import run_cmd
+from hashlib import sha256
 from pathlib import Path
 import glob
 import re
 import shutil
+
+
+APSCLIENT_STOCK_SHA256 = 'b6669463a2dbdc22d20d0bb1a565ef9f1cc058f5f34c627a8d49971f7c509bec'
+APSCLIENT_PATCHED_SHA256 = 'fadd66bfe6344294fa0d3055382b1506e8432d01a562849478be82973e5974f8'
+APSCLIENT_HEIF_DLOPEN_TARGETS = (
+    (0x4C11B, b'libHeifEncoderWrapper.so', b'xibHeifEncoderWrapper.so'),
+    (0x48551, b'libNativeWinBuffExchange.so', b'xibNativeWinBuffExchange.so'),
+)
 
 
 def lib_fixup_system_ext_suffix(lib: str, partition: str, *args, **kwargs):
@@ -4223,31 +4232,6 @@ def blob_fixup_camera_unit_sdk_runtime(ctx, file, file_path, *args, tmp_dir=None
         if fixed != data:
             smali.write_text(fixed, encoding='utf-8')
 
-    smali = next(Path(tmp_dir).glob('smali*/com/oplus/ocs/camera/consumer/apsAdapter/APSClient.smali'), None)
-    if smali is not None:
-        data = smali.read_text(encoding='utf-8')
-        old = (
-            '    if-eqz v2, :cond_0\n'
-            '\n'
-            '    .line 840\n'
-            '    invoke-static {p0}, Lcom/oplus/ocs/camera/consumer/apsAdapter/APSClientWrapper$Stub;->asInterface(Lcom/oplus/ocs/camera/consumer/apsAdapter/APSClient;)Lcom/oplus/ocs/camera/consumer/apsAdapter/APSClientWrapper;\n'
-        )
-        new = (
-            '    if-eqz v2, :cond_0\n'
-            '\n'
-            '    const-string v2, "APSClient-jni"\n'
-            '\n'
-            '    invoke-static {v2}, Lcom/oplus/ocs/camera/consumer/apsAdapter/adapter/ApsUtils;->loadLibrary(Ljava/lang/String;)Z\n'
-            '\n'
-            '    .line 840\n'
-            '    invoke-static {p0}, Lcom/oplus/ocs/camera/consumer/apsAdapter/APSClientWrapper$Stub;->asInterface(Lcom/oplus/ocs/camera/consumer/apsAdapter/APSClient;)Lcom/oplus/ocs/camera/consumer/apsAdapter/APSClientWrapper;\n'
-        )
-        fixed = data.replace(old, new, 1)
-        if fixed == data and 'const-string v2, "APSClient-jni"' not in data:
-            raise ValueError('com.oplus.camera.unit.sdk.jar APSClient cmd JNI load pattern not found')
-        if fixed != data:
-            smali.write_text(fixed, encoding='utf-8')
-
     smali = next(Path(tmp_dir).glob('smali*/com/oplus/ocs/camera/producer/mode/BaseMode.smali'), None)
     if smali is None:
         return
@@ -4300,6 +4284,41 @@ def blob_fixup_camera_unit_facebeauty_probe_path(ctx, file, file_path, *args, tm
         return
 
 
+def blob_fixup_apsclient_force_java_heif(ctx, file, file_path, *args, **kwargs):
+    # OPlus supports two HEIF handoffs: optional native helpers when dlopen can
+    # resolve them, otherwise its Java-reflection fallback. Stock keeps this APS
+    # client in /product and the helpers in /system_ext, so product namespace
+    # isolation selects reflection. Our system_ext remap co-located them and
+    # unintentionally enabled the native route that stock CPH2747 does not use.
+    path = Path(file_path)
+    blob = path.read_bytes()
+    actual_sha256 = sha256(blob).hexdigest()
+    if actual_sha256 != APSCLIENT_STOCK_SHA256:
+        raise ValueError(
+            'APS client SHA-256 mismatch: '
+            f'expected {APSCLIENT_STOCK_SHA256}, found {actual_sha256}'
+        )
+
+    patched = bytearray(blob)
+    for offset, expected, replacement in APSCLIENT_HEIF_DLOPEN_TARGETS:
+        end = offset + len(expected)
+        if blob[offset:end] != expected:
+            raise ValueError(
+                f'APS client dlopen target mismatch at {offset:#x}: '
+                f'expected {expected!r}, found {blob[offset:end]!r}'
+            )
+        patched[offset:end] = replacement
+
+    result = bytes(patched)
+    patched_sha256 = sha256(result).hexdigest()
+    if patched_sha256 != APSCLIENT_PATCHED_SHA256:
+        raise ValueError(
+            'patched APS client SHA-256 mismatch: '
+            f'expected {APSCLIENT_PATCHED_SHA256}, found {patched_sha256}'
+        )
+    path.write_bytes(result)
+
+
 lib_fixups: lib_fixups_user_type = {
     # **lib_fixups already includes the clang RT ubsan and proto 3.9.1
     # fixups that were previously handled by the bash helper functions
@@ -4321,10 +4340,11 @@ lib_fixups: lib_fixups_user_type = {
 
 
 blob_fixups: blob_fixups_user_type = {
+    'system_ext/lib64/libAPSClient-cmd-jni.so': blob_fixup()
+        .call(blob_fixup_apsclient_force_java_heif),
     'system_ext/framework/com.oplus.camera.unit.sdk.jar': blob_fixup()
         .apktool_unpack('patches-sdk')
         .patch_dir('patches-sdk')
-        .call(blob_fixup_camera_unit_sdk_runtime)
         .call(blob_fixup_camera_unit_facebeauty_probe_path)
         .apktool_pack()
         .stripzip(),
