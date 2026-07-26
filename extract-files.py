@@ -6041,6 +6041,71 @@ lib_fixups: lib_fixups_user_type = {
     ): lib_fixup_system_ext_suffix,
 }
 
+def blob_fixup_opluscamera_aac_stereo(ctx, file, file_path, *args, tmp_dir=None, **kwargs):
+    # OplusRecord feeds the camera encoder as stereo on macanc/macan, but this
+    # APK can configure the ordinary AAC MediaFormat as mono for depth/video.
+    # Stagefright then trims every other AAC input buffer as overlapping
+    # timestamps, producing slow/robotic audio. Keep OZO paths unchanged and
+    # only force the ordinary AAC encoder MediaFormat channel count to stereo.
+    if tmp_dir is None:
+        return
+
+    root = Path(tmp_dir)
+
+    codec_smali = codec_data = None
+    preferred_paths = (
+        'smali*/qj/j.smali',
+        'smali*/ak/l.smali',
+    )
+    for pattern in preferred_paths:
+        for smali in root.glob(pattern):
+            data = smali.read_text(encoding='utf-8', errors='ignore')
+            if '.source "CameraMediaCodec.java"' in data and '"audio/mp4a-latm"' in data:
+                codec_smali, codec_data = smali, data
+                break
+        if codec_smali is not None:
+            break
+    if codec_smali is None:
+        for smali in root.glob('smali*/**/*.smali'):
+            data = smali.read_text(encoding='utf-8', errors='ignore')
+            if '.source "CameraMediaCodec.java"' in data and '"audio/mp4a-latm"' in data:
+                codec_smali, codec_data = smali, data
+                break
+    if codec_smali is None:
+        raise ValueError('OplusCamera CameraMediaCodec smali not found')
+    if ':codex_aac_stereo_done' in codec_data:
+        return
+
+    fixed = codec_data
+    replacements = [
+        (
+            r'(    :cond_4\n)'
+            r'(    invoke-static \{v8, v4, v5\}, Landroid/media/MediaFormat;->createAudioFormat\(Ljava/lang/String;II\)Landroid/media/MediaFormat;\n)',
+            r'\1    const/4 v5, 0x2\n\n\2',
+        ),
+        (
+            r'(    :cond_9\n'
+            r'    move-object/from16 v5, v21\n\n'
+            r'(?:    \.line \d+\n)+)'
+            r'(    invoke-static \{v5, v1, v4\}, Landroid/media/MediaFormat;->createAudioFormat\(Ljava/lang/String;II\)Landroid/media/MediaFormat;\n)',
+            r'\1    const/4 v4, 0x2\n\n\2',
+        ),
+        (
+            r'(    :cond_d\n)'
+            r'(    invoke-static \{v5, v1, v2\}, Landroid/media/MediaFormat;->createAudioFormat\(Ljava/lang/String;II\)Landroid/media/MediaFormat;\n)',
+            r'\1    const/4 v2, 0x2\n\n\2',
+        ),
+    ]
+
+    for pattern, replacement in replacements:
+        fixed, count = re.subn(pattern, replacement, fixed, count=1)
+        if count != 1:
+            raise ValueError(f'OplusCamera AAC stereo patch point not found in {codec_smali}')
+
+    fixed += '\n# :codex_aac_stereo_done\n'
+
+    codec_smali.write_text(fixed, encoding='utf-8')
+
 def blob_fixup_filemanager_cut_skip_k0_when_same_disk(ctx, file, file_path, *args, tmp_dir=None, **kwargs):
     if tmp_dir is None:
         return
@@ -6289,6 +6354,7 @@ blob_fixups: blob_fixups_user_type = {
         .call(blob_fixup_opluscamera_font)
         .call(blob_fixup_opluscamera_blur_seginit_guard)
         .call(blob_fixup_opluscamera_qr_local_detect)
+        .call(blob_fixup_opluscamera_aac_stereo)
         .call(blob_fixup_strip_oem_permissions)
         .apktool_pack()
         .stripzip(),
