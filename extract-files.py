@@ -1509,9 +1509,32 @@ def blob_fixup_oppogallery_hide_google_photos_backup_settings(ctx, file, file_pa
             '    iget-object v2, p0, Lcom/oplus/gallery/timelinepage/childview/TimelineEmptyView$a;->this$0:Lcom/oplus/gallery/timelinepage/childview/TimelineEmptyView;\n'
         )
         fixed = data.replace(old, new, 1)
-        if fixed == data:
-            raise ValueError('OppoGallery2 Google cloud empty action patch point not found')
-        timeline_empty.write_text(fixed, encoding='utf-8')
+        if fixed != data:
+            timeline_empty.write_text(fixed, encoding='utf-8')
+
+    timeline_cloud_item = next(Path(tmp_dir).glob('smali*/com/oplus/aiunit/vision/sro.smali'), None)
+    if timeline_cloud_item is not None:
+        data = timeline_cloud_item.read_text(encoding='utf-8')
+        if 'TimelineEmptyView$isShowCloudItem$2' in data:
+            fixed = _replace_smali_method(
+                data,
+                'public final invokeSuspend(Ljava/lang/Object;)Ljava/lang/Object;',
+                (
+                    '    .locals 1\n'
+                    '\n'
+                    '    invoke-static {p1}, Lkotlin/ResultKt;->throwOnFailure(Ljava/lang/Object;)V\n'
+                    '\n'
+                    '    const/4 v0, 0x0\n'
+                    '\n'
+                    '    invoke-static {v0}, Lkotlin/coroutines/jvm/internal/Boxing;->boxBoolean(Z)Ljava/lang/Boolean;\n'
+                    '\n'
+                    '    move-result-object v0\n'
+                    '\n'
+                    '    return-object v0\n'
+                ),
+            )
+            if fixed != data:
+                timeline_cloud_item.write_text(fixed, encoding='utf-8')
 
     # Hide the photo-page overflow entry on newer Gallery builds. The older
     # settings-only patch below does not catch this 16.0.8 menu path.

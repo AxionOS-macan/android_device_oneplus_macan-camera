@@ -3,7 +3,6 @@
 
 # Camera
 my_product/app/OplusCamera/OplusCamera.apk:system_ext/priv-app/OplusCamera/OplusCamera.apk;OVERRIDES=Aperture,Camera2,GoogleCameraGo
-my_stock/priv-app/OppoGallery2/OppoGallery2.apk:system_ext/priv-app/OppoGallery2/OppoGallery2.apk
 my_stock/app/FileManager/FileManager.apk:system_ext/app/FileManager/FileManager.apk
 my_stock/app/ambientalert/ambientalert.apk:system_ext/app/ambientalert/ambientalert.apk
 my_stock/priv-app/UMS/UMS.apk:system_ext/priv-app/UMS/UMS.apk
@@ -57,6 +56,9 @@ my_product/lib64/libsingle_camera_bokeh_native.so:system_ext/lib64/libsingle_cam
 my_product/lib64/libsingle_camera_bokeh2_native.so:system_ext/lib64/libsingle_camera_bokeh2_native.so;DISABLE_CHECKELF
 my_product/lib64/libst_mobile.so:system_ext/lib64/libst_mobile.so;DISABLE_CHECKELF
 my_product/lib64/libst_sticker_jni.so:system_ext/lib64/libst_sticker_jni.so;FIX_SONAME;DISABLE_CHECKELF
+
+# From OxygenOS 16 CPH2769_11.A.47
+my_stock/priv-app/OppoGallery2/OppoGallery2.apk:system_ext/priv-app/OppoGallery2/OppoGallery2.apk
 
 odm/lib64/libOplusSecurity.so
 odm/lib64/libalogencrypt.so
