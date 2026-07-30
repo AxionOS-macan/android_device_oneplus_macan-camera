@@ -1198,8 +1198,8 @@ def blob_fixup_oppogallery_receiver_flags(ctx, file, file_path, *args, tmp_dir=N
     if fixed != data:
         smali.write_text(fixed, encoding='utf-8')
 
-    smali = Path(tmp_dir) / 'smali_classes9/com/oplus/gallery/foundation/uikit/broadcast/bus/ActionReceiver.smali'
-    data = smali.read_text(encoding='utf-8') if smali.exists() else ''
+    smali = next(Path(tmp_dir).glob('smali*/com/oplus/gallery/foundation/uikit/broadcast/bus/ActionReceiver.smali'), None)
+    data = smali.read_text(encoding='utf-8') if smali is not None else ''
     old = (
         '    iget v7, v0, Lcom/oplus/aiunit/vision/a10;->c:I\n'
         '\n'
@@ -1225,9 +1225,20 @@ def blob_fixup_oppogallery_receiver_flags(ctx, file, file_path, *args, tmp_dir=N
         '    invoke-virtual/range {v2 .. v7}, Landroid/content/Context;->registerReceiver(Landroid/content/BroadcastReceiver;Landroid/content/IntentFilter;Ljava/lang/String;Landroid/os/Handler;I)Landroid/content/Intent;\n'
     )
     fixed = data.replace(old, new)
+    if fixed == data and data:
+        fixed = re.sub(
+            r'(    iget v7, v0, Lcom/oplus/aiunit/vision/[^;]+;->c:I\n)'
+            r'((?:\n|    \.line \d+\n)*'
+            r'    move-object v3, p0\n'
+            r'(?:\n|    \.line \d+\n)*'
+            r'    invoke-virtual/range \{v2 \.\. v7\}, Landroid/content/Context;->registerReceiver\(Landroid/content/BroadcastReceiver;Landroid/content/IntentFilter;Ljava/lang/String;Landroid/os/Handler;I\)Landroid/content/Intent;)',
+            r'\1\n    and-int/lit8 v7, v7, -0x3\n\n    or-int/lit8 v7, v7, 0x4\n\2',
+            data,
+            count=1,
+        )
     if fixed != data:
         smali.write_text(fixed, encoding='utf-8')
-    elif smali.exists() and 'or-int/lit8 v7, v7, 0x4' not in data:
+    elif smali is not None and 'or-int/lit8 v7, v7, 0x4' not in data:
         raise ValueError('OppoGallery2 ActionReceiver receiver flag patch point not found')
 
 
@@ -1235,8 +1246,10 @@ def blob_fixup_oppogallery_wallpaper_attach_intent(ctx, file, file_path, *args, 
     if tmp_dir is None:
         return
 
-    smali = Path(tmp_dir) / 'smali_classes10/com/oplus/gallery/pictureeditorpage/PictureEditorDM.smali'
-    data = smali.read_text(encoding='utf-8') if smali.exists() else ''
+    smali = next(Path(tmp_dir).glob('smali*/com/oplus/gallery/pictureeditorpage/PictureEditorDM.smali'), None)
+    if smali is None:
+        raise ValueError('OppoGallery2 PictureEditorDM smali not found')
+    data = smali.read_text(encoding='utf-8')
     replacement = (
         '.method public final a(Landroid/app/Activity;Landroid/net/Uri;)V\n'
         '    .locals 3\n'
@@ -1306,11 +1319,22 @@ def blob_fixup_oppogallery_safe_box_custom_flag(ctx, file, file_path, *args, tmp
             r'(?:\n|    \.line \d+\n)*'
             r'    move-result (?P=result)\n'
         )
+        pattern_g19 = re.compile(
+            r'(    const-string(?:/jumbo)? (?P<key>[vp]\d+), "feature_is_support_user_custom_safe_box"\n'
+            r'(?:\n|    \.line \d+\n)*'
+            r'    invoke-static \{[vp]\d+, (?P=key), (?P<result>[vp]\d+)\}, Lcom/oplus/aiunit/vision/g19;->d\(ILjava/lang/String;Z\)Z\n'
+            r'(?:\n|    \.line \d+\n)*)'
+            r'    move-result (?P=result)\n'
+        )
         for smali in Path(tmp_dir).glob('smali*/com/oplus/aiunit/vision/*.smali'):
             data = smali.read_text(encoding='utf-8')
             if 'feature_is_support_user_custom_safe_box' not in data:
                 continue
             fixed = pattern.sub(r'\1    const/4 \g<result>, 0x1\n', data, count=1)
+            if fixed != data:
+                smali.write_text(fixed, encoding='utf-8')
+                return
+            fixed = pattern_g19.sub(r'\1    const/4 \g<result>, 0x1\n', data, count=1)
             if fixed != data:
                 smali.write_text(fixed, encoding='utf-8')
                 return
@@ -1432,6 +1456,62 @@ def blob_fixup_oppogallery_google_photos_launch_consent_after_verify_failure(ctx
 def blob_fixup_oppogallery_hide_google_photos_backup_settings(ctx, file, file_path, *args, tmp_dir=None, **kwargs):
     if tmp_dir is None:
         return
+
+    settings_xml = Path(tmp_dir) / 'res/xml/setting_album_settings.xml'
+    if settings_xml.exists():
+        data = settings_xml.read_text(encoding='utf-8')
+        fixed = re.sub(
+            r'(?ms)\n    <com\.coui\.appcompat\.preference\.COUIPreferenceCategory[^>]*android:key="pref_category_cloud_sync_key".*?</com\.coui\.appcompat\.preference\.COUIPreferenceCategory>',
+            '',
+            data,
+            count=1,
+        )
+        fixed = re.sub(
+            r'(?ms)\n        <com\.oplus\.gallery\.foundation\.ui\.RtlCOUIJumpPreference[^>]*android:key="pref_key_auto_sync_2"[^/]*/>',
+            '',
+            fixed,
+            count=1,
+        )
+        if fixed != data:
+            settings_xml.write_text(fixed, encoding='utf-8')
+
+    for strings_xml in Path(tmp_dir).glob('res/values*/strings.xml'):
+        data = strings_xml.read_text(encoding='utf-8')
+        fixed = re.sub(
+            r'<string name="main_download_from_google_cloud">.*?</string>',
+            '<string name="main_download_from_google_cloud" />',
+            data,
+            count=1,
+        )
+        if fixed != data:
+            strings_xml.write_text(fixed, encoding='utf-8')
+
+    timeline_empty = next(Path(tmp_dir).glob('smali*/com/oplus/gallery/timelinepage/childview/TimelineEmptyView$a.smali'), None)
+    if timeline_empty is not None:
+        data = timeline_empty.read_text(encoding='utf-8')
+        old = (
+            '    .line 320\n'
+            '    iget-object v2, p0, Lcom/oplus/gallery/timelinepage/childview/TimelineEmptyView$a;->this$0:Lcom/oplus/gallery/timelinepage/childview/TimelineEmptyView;\n'
+        )
+        new = (
+            '    invoke-static {}, Lcom/oplus/gallery/cloudsyncpage/CloudSyncPageDM;->k()Z\n'
+            '\n'
+            '    move-result v2\n'
+            '\n'
+            '    if-eqz v2, :cond_oplus_google_tip_ok\n'
+            '\n'
+            '    const/4 v0, 0x0\n'
+            '\n'
+            '    const/4 p1, 0x0\n'
+            '\n'
+            '    :cond_oplus_google_tip_ok\n'
+            '    .line 320\n'
+            '    iget-object v2, p0, Lcom/oplus/gallery/timelinepage/childview/TimelineEmptyView$a;->this$0:Lcom/oplus/gallery/timelinepage/childview/TimelineEmptyView;\n'
+        )
+        fixed = data.replace(old, new, 1)
+        if fixed == data:
+            raise ValueError('OppoGallery2 Google cloud empty action patch point not found')
+        timeline_empty.write_text(fixed, encoding='utf-8')
 
     # Hide the photo-page overflow entry on newer Gallery builds. The older
     # settings-only patch below does not catch this 16.0.8 menu path.
@@ -1600,6 +1680,8 @@ def blob_fixup_oppogallery_system_share_helper(ctx, file, file_path, *args, tmp_
 
     smali = Path(tmp_dir) / 'smali_classes8' / 'com' / 'oplus' / 'aiunit' / 'vision' / 'x7m.smali'
     if not smali.exists():
+        if next(Path(tmp_dir).glob('smali*/com/oplus/aiunit/vision/z910.smali'), None) is not None:
+            return
         raise ValueError('OppoGallery2 ShareHelper smali not found')
 
     data = smali.read_text(encoding='utf-8', errors='ignore')

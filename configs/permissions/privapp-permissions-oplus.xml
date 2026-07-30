@@ -104,6 +104,9 @@
         <permission name="android.permission.USE_RESERVED_DISK"/>
         <permission name="android.permission.SET_BIOMETRIC_DIALOG_ADVANCED"/>
         <permission name="android.permission.FORCE_STOP_PACKAGES"/>
+        <permission name="android.permission.MODIFY_AUDIO_ROUTING"/>
+        <permission name="android.permission.CONTROL_INCALL_EXPERIENCE"/>
+        <permission name="android.permission.START_FOREGROUND_SERVICES_FROM_BACKGROUND"/>
     </privapp-permissions>
 
     <!-- OPLUS private safe -->
@@ -123,6 +126,7 @@
         <permission name="android.permission.MANAGE_USERS"/>
         <permission name="android.permission.INSTALL_PACKAGES"/>
         <permission name="android.permission.SUBSCRIBE_TO_KEYGUARD_LOCKED_STATE"/>
+        <permission name="android.permission.STATUS_BAR"/>
     </privapp-permissions>
 
     <!-- OPLUS Live Alert -->
