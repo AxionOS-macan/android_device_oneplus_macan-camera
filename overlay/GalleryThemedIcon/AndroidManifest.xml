@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.oneplus.gallery.themedicon.overlay">
+
+    <overlay
+        android:targetPackage="com.oneplus.gallery"
+        android:isStatic="true"
+        android:priority="200" />
+
+    <application android:label="GalleryThemedIcon" />
+
+</manifest>

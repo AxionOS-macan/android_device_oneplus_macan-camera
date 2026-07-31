@@ -3,6 +3,7 @@ OPLUS_CAMERA_PATH := device/oneplus/macan-camera
 
 # Blob dependencies
 PRODUCT_PACKAGES += \
+    GalleryThemedIcon \
     aon.frameworkres.overlay.product \
     android.hardware.graphics.common-V3-ndk.vendor \
     oplus-services
