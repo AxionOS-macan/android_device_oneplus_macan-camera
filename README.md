@@ -22,7 +22,7 @@ then run:
 
 ```
 cd device/oneplus/macan-camera
-./extract-files.py /path/to/OP15/dump
+./extract-files.py /path/to/OP15R/dump
 ```
 
 The extractor reads `proprietary-files.txt`, pulls the listed files from the
@@ -39,4 +39,4 @@ vendor/oneplus/macan-camera
 ```
 
 After changing `proprietary-files.txt`, rerun `./extract-files.py` against the
-OP15 dump before building.
+OP15R dump before building.

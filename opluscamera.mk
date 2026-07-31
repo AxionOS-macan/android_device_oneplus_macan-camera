@@ -9,14 +9,6 @@ PRODUCT_PACKAGES += \
 PRODUCT_SYSTEM_SERVER_JARS += \
     oplus-services
 
-# Framework
-# PRODUCT_BOOT_JARS += \
-#    oplus-framework
-
-# Init
-#PRODUCT_PACKAGES += \
-#    init.oplus.camera.rc
-
 # Permissions
 PRODUCT_COPY_FILES += \
     $(OPLUS_CAMERA_PATH)/configs/init/init.oplus.camera_rus.rc:$(TARGET_COPY_OUT_SYSTEM_EXT)/etc/init/init.oplus.camera_rus.rc \
@@ -27,21 +19,14 @@ PRODUCT_COPY_FILES += \
     $(OPLUS_CAMERA_PATH)/configs/framework/androidx.camera.extensions.impl.jar:$(TARGET_COPY_OUT_SYSTEM_EXT)/framework/androidx.camera.extensions.impl.jar \
     $(OPLUS_CAMERA_PATH)/configs/sysconfig/hiddenapi-package-oplus-whitelist.xml:$(TARGET_COPY_OUT_SYSTEM)/etc/sysconfig/hiddenapi-package-oplus-whitelist.xml
 
-# OP15 QNN runtime used by stock camera processing paths.
+# OplusCamera buffer exchange helpers.
 PRODUCT_PACKAGES += \
-    libQnnHtp_gallery_system_ext \
-    libQnnHtpPrepare_gallery_system_ext \
-    libQnnHtpV81Stub_gallery_system_ext \
-    libQnnHtpV81CalculatorStub_gallery_system_ext \
-    libQnnSaver_gallery_system_ext \
-    libQnnSystem_gallery_system_ext \
     libNativeWinBuffExchange_camera_app_lib \
-    libHeifEncoderWrapper_camera_app_lib \
-    libHeifWinBufExchg-jni
+    libHeifEncoderWrapper_camera_app_lib
 
 # Properties
 PRODUCT_PRODUCT_PROPERTIES += \
-    persist.vendor.camera.privapp.list=com.oplus.camera \
+    persist.vendor.camera.privapp.list=com.oplus.camera,com.oneplus.gallery \
     persist.camera.override_enable=true \
     persist.camera.override_preview_hdr_support=false \
     persist.sys.feature.dolby_vision=1 \
@@ -59,10 +44,11 @@ PRODUCT_PRODUCT_PROPERTIES += \
     ro.build.version.oplusrom.display=16.0.8 \
     ro.build.version.oplusrom.confidential=V16.1.0 \
     ro.com.google.lens.oem_camera_package=com.oplus.camera \
-    ro.com.google.lens.oem_image_package=com.oplus.screenshot \
+    ro.com.google.lens.oem_image_package=com.oneplus.gallery,com.oplus.screenshot \
     ro.camerax.extensions.enabled=true \
     ro.oplus.fusionlight=true \
     ro.oplus.camera.defercap.support=1 \
+    ro.oplus.system.gallery.name=com.oneplus.gallery \
     ro.oplus.system.camera.name=com.oplus.camera \
     ro.oplus.camera.defercap.all.quick.visible.support=1 \
     ro.oplus.camera.livephoto.support=1 \
@@ -79,7 +65,7 @@ PRODUCT_PRODUCT_PROPERTIES += \
     ro.oplus.camera.video_beauty.prefix=oplus.video.beauty. \
     ro.oplus.camera.speechassist=true \
     ro.oplus.system.camera.flashlight=com.oplus.motor.flashlight \
-    ro.camera.privileged.3rdpartyApp=com.mediatek.expert.mtkcamhelper; \
+    ro.camera.privileged.3rdpartyApp=com.mediatek.expert.mtkcamhelper;com.aiunit.aon; \
     persist.logd.log.load.camerahalserver.lower_limit=1000 \
     persist.logd.log.load.camerahalserver.threshold=800000 \
     persist.logd.log.load.camerahalserver.upper_limit=3000 \

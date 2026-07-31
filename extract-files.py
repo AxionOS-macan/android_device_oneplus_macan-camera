@@ -26,7 +26,6 @@ import glob
 import re
 import shutil
 
-
 APSCLIENT_STOCK_SHA256 = 'b6669463a2dbdc22d20d0bb1a565ef9f1cc058f5f34c627a8d49971f7c509bec'
 APSCLIENT_PATCHED_SHA256 = 'fadd66bfe6344294fa0d3055382b1506e8432d01a562849478be82973e5974f8'
 APSCLIENT_HEIF_DLOPEN_TARGETS = (
@@ -66,14 +65,12 @@ def _noop_smali_method(data: str, signature: str) -> str:
         data,
     )
 
-
 def _replace_smali_method(data: str, signature: str, body: str) -> str:
     return re.sub(
         rf'(?ms)^\.method {re.escape(signature)}\n.*?^\.end method',
         f'.method {signature}\n{body}.end method',
         data,
     )
-
 
 def _empty_map_smali_body() -> str:
     return (
@@ -85,7 +82,6 @@ def _empty_map_smali_body() -> str:
         '\n'
         '    return-object v0\n'
     )
-
 
 def blob_fixup_apktool_unpack_src(ctx, file, file_path, *args, tmp_dir=None, **kwargs):
     if tmp_dir is None:
@@ -104,7 +100,6 @@ def blob_fixup_apktool_unpack_src(ctx, file, file_path, *args, tmp_dir=None, **k
         '--no-res',
     ])
 
-
 def blob_fixup_apktool_unpack_full(ctx, file, file_path, *args, tmp_dir=None, **kwargs):
     if tmp_dir is None:
         return
@@ -120,7 +115,6 @@ def blob_fixup_apktool_unpack_full(ctx, file, file_path, *args, tmp_dir=None, **
         tmp_dir,
         '-f',
     ])
-
 
 def blob_fixup_apktool_unpack_manifest(ctx, file, file_path, *args, tmp_dir=None, **kwargs):
     if tmp_dir is None:
@@ -138,7 +132,6 @@ def blob_fixup_apktool_unpack_manifest(ctx, file, file_path, *args, tmp_dir=None
         '-f',
         '-s',
     ])
-
 
 def blob_fixup_opluscamera_font(ctx, file, file_path, *args, tmp_dir=None, **kwargs):
     # OEM camera font-NPE neutralizer. The TypeFaceUtil static
@@ -164,7 +157,6 @@ def blob_fixup_opluscamera_font(ctx, file, file_path, *args, tmp_dir=None, **kwa
         if fixed != data:
             smali.write_text(fixed, encoding='utf-8')
         return
-
 
 def blob_fixup_opluscamera_blur_seginit_guard(ctx, file, file_path, *args, tmp_dir=None, **kwargs):
     # Portrait blur initialization can fail when the OEM segmentation stack is
@@ -628,7 +620,6 @@ def blob_fixup_opluscamera_qr_local_detect(ctx, file, file_path, *args, tmp_dir=
         raise ValueError('ScanClient detect method replacement failed')
     scan_smali.write_text(fixed, encoding='utf-8')
 
-
 def blob_fixup_opluscamera_third_party_gallery(ctx, file, file_path, *args, tmp_dir=None, **kwargs):
     # Drop the OEM gallery dependency for thumbnail preview. This mirrors the
     # upstream giulia camera-port approach: bypass the package availability
@@ -700,7 +691,6 @@ def blob_fixup_opluscamera_third_party_gallery(ctx, file, file_path, *args, tmp_
 
     smali.write_text(fixed, encoding='utf-8')
 
-
 def blob_fixup_strip_oem_permissions(ctx, file, file_path, *args, tmp_dir=None, **kwargs):
     # Strip undefined OEM permission gates from component declarations while
     # keeping the components registered.
@@ -720,8 +710,6 @@ def blob_fixup_strip_oem_permissions(ctx, file, file_path, *args, tmp_dir=None, 
     if fixed != data:
         manifest.write_text(fixed, encoding='utf-8')
 
-
-
 def blob_fixup_opluscamera_oppo_component_safe(ctx, file, file_path, *args, tmp_dir=None, **kwargs):
     if tmp_dir is None:
         return
@@ -737,7 +725,6 @@ def blob_fixup_opluscamera_oppo_component_safe(ctx, file, file_path, *args, tmp_
             1,
         )
         manifest.write_text(data, encoding='utf-8')
-
 
 def blob_fixup_opluscamera_uses_library(ctx, file, file_path, *args, tmp_dir=None, **kwargs):
     if tmp_dir is None:
@@ -757,63 +744,6 @@ def blob_fixup_opluscamera_uses_library(ctx, file, file_path, *args, tmp_dir=Non
         data = data.replace('</application>', entry + '    </application>', 1)
         manifest.write_text(data, encoding='utf-8')
 
-
-
-
-def blob_fixup_cryptoeng_permissions_xml(ctx, file, file_path, *args, tmp_dir=None, **kwargs):
-    path = Path(file_path)
-    data = path.read_text(encoding='utf-8')
-    fixed = data.replace('\n</permissions>\n\n<permissions>\n', '\n')
-    if fixed != data:
-        path.write_text(fixed, encoding='utf-8')
-
-
-def blob_fixup_cryptoeng_init_rc(ctx, file, file_path, *args, tmp_dir=None, **kwargs):
-    path = Path(file_path)
-    data = path.read_text(encoding='utf-8')
-    data = data.replace(
-        '    mkdir /data/vendor_de/0/cryptoeng 0770 system system encryption=None\n',
-        '    mkdir /data/vendor_de/0/cryptoeng 0770 system system encryption=None\n'
-        '    restorecon_recursive /data/vendor_de/0/cryptoeng\n',
-        1,
-    )
-    old = (
-        '    if [ "$(getprop ro.soc.model)" = "SM6450" ]; then\n'
-        '        copy /vendor/etc/oplus_PPID_licenses.pfm /mnt/vendor/persist/data/pfm/licenses/oplus_PPID_licenses.pfm\n'
-        '        chmod 0600 /mnt/vendor/persist/data/pfm/licenses/oplus_PPID_licenses.pfm\n'
-        '        chown system system /mnt/vendor/persist/data/pfm/licenses/oplus_PPID_licenses.pfm\n'
-        '    fi\n'
-    )
-    fixed = data.replace(old, '')
-    if fixed != data:
-        path.write_text(fixed, encoding='utf-8')
-
-
-def blob_fixup_cryptoeng_manifest(ctx, file, file_path, *args, tmp_dir=None, **kwargs):
-    path = Path(file_path)
-    data = path.read_text(encoding='utf-8')
-    data = data.replace('<!--\n    <hal format="hidl">', '    <hal format="hidl">')
-    data = data.replace('    </hal>\n-->\n    <hal format="aidl">', '    </hal>\n    <hal format="aidl">')
-    path.write_text(data, encoding='utf-8')
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 def blob_fixup_oplus_camera_system_properties(ctx, file, file_path, *args, tmp_dir=None, **kwargs):
     if tmp_dir is None:
         return
@@ -830,7 +760,6 @@ def blob_fixup_oplus_camera_system_properties(ctx, file, file_path, *args, tmp_d
             fixed = fixed.replace(old, new)
         if fixed != data:
             smali.write_text(fixed, encoding='utf-8')
-
 
 def blob_fixup_oplus_camera_framework_shims(ctx, file, file_path, *args, tmp_dir=None, **kwargs):
     if tmp_dir is None:
@@ -3954,7 +3883,6 @@ def blob_fixup_oplus_camera_framework_shims(ctx, file, file_path, *args, tmp_dir
         if fixed != data:
             smali.write_text(fixed, encoding='utf-8')
 
-
 def blob_fixup_opluscamera_defer_job_count(ctx, file, file_path, *args, tmp_dir=None, **kwargs):
     if tmp_dir is None:
         return
@@ -3975,7 +3903,6 @@ def blob_fixup_opluscamera_defer_job_count(ctx, file, file_path, *args, tmp_dir=
     )
     if fixed != data:
         smali.write_text(fixed, encoding='utf-8')
-
 
 def blob_fixup_camera_unit_op15_camera_type(ctx, file, file_path, *args, tmp_dir=None, **kwargs):
     if tmp_dir is None:
@@ -4064,7 +3991,6 @@ def blob_fixup_camera_unit_op15_camera_type(ctx, file, file_path, *args, tmp_dir
     )
     if fixed != data:
         smali.write_text(fixed, encoding='utf-8')
-
 
 def blob_fixup_camera_unit_sdk_runtime(ctx, file, file_path, *args, tmp_dir=None, **kwargs):
     if tmp_dir is None:
@@ -4160,7 +4086,6 @@ def blob_fixup_camera_unit_sdk_runtime(ctx, file, file_path, *args, tmp_dir=None
     if fixed != data:
         smali.write_text(fixed, encoding='utf-8')
 
-
 def blob_fixup_camera_unit_facebeauty_probe_path(ctx, file, file_path, *args, tmp_dir=None, **kwargs):
     # Re-point the guarded ProductJni probe from /product/lib64 to /system_ext/lib64.
     if tmp_dir is None:
@@ -4174,7 +4099,6 @@ def blob_fixup_camera_unit_facebeauty_probe_path(ctx, file, file_path, *args, tm
             continue
         smali.write_text(data.replace(old, new), encoding='utf-8')
         return
-
 
 def blob_fixup_apsclient_force_java_heif(ctx, file, file_path, *args, **kwargs):
     # OPlus supports two HEIF handoffs: optional native helpers when dlopen can
@@ -4226,11 +4150,6 @@ lib_fixups: lib_fixups_user_type = {
     ): lib_fixup_system_ext_suffix,
 }
 
-
-
-
-
-
 blob_fixups: blob_fixups_user_type = {
     'system_ext/lib64/libAPSClient-cmd-jni.so': blob_fixup()
         .call(blob_fixup_apsclient_force_java_heif),
@@ -4250,14 +4169,6 @@ blob_fixups: blob_fixups_user_type = {
         .call(blob_fixup_strip_oem_permissions)
         .apktool_pack()
         .stripzip(),
-    'system_ext/etc/permissions/vendor-oplus-hardware-cryptoeng.xml': blob_fixup()
-        .call(blob_fixup_cryptoeng_permissions_xml),
-    'odm/etc/permissions/vendor-oplus-hardware-cryptoeng.xml': blob_fixup()
-        .call(blob_fixup_cryptoeng_permissions_xml),
-    'odm/etc/init/vendor.oplus.hardware.cryptoeng@1.0-service_FDE.rc': blob_fixup()
-        .call(blob_fixup_cryptoeng_init_rc),
-    'odm/etc/vintf/manifest/manifest_oplus_cryptoeng.xml': blob_fixup()
-        .call(blob_fixup_cryptoeng_manifest),
 }  # fmt: skip
 
 namespace_imports = [
@@ -4283,10 +4194,8 @@ from pathlib import Path
 import os
 import re
 
-
 CUSTOM_SOONG_BEGIN = "// BEGIN macan-camera CUSTOM SOONG MODULES"
 CUSTOM_SOONG_END = "// END macan-camera CUSTOM SOONG MODULES"
-
 
 def write_custom_android_bp():
     top = Path(os.environ.get(
@@ -4307,10 +4216,8 @@ dex_import {{
     system_ext_specific: false,
 }}
 
-
 {CUSTOM_SOONG_END}
 """
-
     old_text = android_bp.read_text()
     new_text = re.sub(
         rf"\n?{re.escape(CUSTOM_SOONG_BEGIN)}.*?{re.escape(CUSTOM_SOONG_END)}\n?",
@@ -4321,6 +4228,5 @@ dex_import {{
 
     if new_text != old_text:
         android_bp.write_text(new_text)
-
 
 write_custom_android_bp()
