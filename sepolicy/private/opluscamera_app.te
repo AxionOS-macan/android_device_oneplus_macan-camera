@@ -42,6 +42,7 @@ allow opluscamera_app nfc_service:service_manager find;
 hal_client_domain(opluscamera_app, vendor_hal_unsignedhexlp)
 allow opluscamera_app vendor_hal_hexlp_server:fd use;
 
+
 #  system_server UDP socket (same as platform_app)
 allow opluscamera_app system_server:udp_socket {
     getattr read recvfrom write getopt setopt };

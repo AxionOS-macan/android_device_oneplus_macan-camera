@@ -2,6 +2,7 @@ app_domain(opluscamera_app)
 net_domain(opluscamera_app)
 hal_client_domain(opluscamera_app, vendor_hal_dspmanager)
 hal_client_domain(opluscamera_app, vendor_hal_qspmhal)
+hal_client_domain(opluscamera_app, vendor_hal_oplus_urcc)
 
 allow opluscamera_app adsprpcd_file:dir r_dir_perms;
 allow opluscamera_app public_adsprpcd_file:file r_file_perms;
@@ -55,6 +56,8 @@ binder_call(opluscamera_app, system_server)
 binder_call(opluscamera_app, surfaceflinger)
 allow opluscamera_app vendor_default_prop:file { open read getattr map };
 
+
+
 allow opluscamera_app activity_service:service_manager find;
 allow opluscamera_app display_service:service_manager find;
 allow opluscamera_app surfaceflinger_service:service_manager find;
@@ -65,7 +68,3 @@ allow opluscamera_app hal_system_suspend_service:service_manager find;
 
 # Offline camera post-processing service is protected by hal_camera policy.
 # Do not mark this app as a hal_camera client; that trips appdomain neverallows.
-
-# URCC
-hal_client_domain(opluscamera_app, vendor_hal_oplus_urcc)
-allow hal_oplus_urcc_aidl opluscamera_app:dir search;
