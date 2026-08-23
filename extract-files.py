@@ -173,14 +173,21 @@ def blob_fixup_opluscamera_blur_seginit_guard(ctx, file, file_path, *args, tmp_d
                 return smali, data
         return None, None
 
-    process_smali = next(Path(tmp_dir).glob('smali*/ub/b.smali'), None)
-    if process_smali is not None:
-        data = process_smali.read_text(encoding='utf-8', errors='ignore')
-    else:
+    process_smali = data = None
+    for candidate in Path(tmp_dir).glob("smali*/**/b.smali"):
+        candidate_data = candidate.read_text(encoding="utf-8", errors="ignore")
+        if all(needle in candidate_data for needle in (
+                "/odm/etc/camera/singleblur/personseg.bin",
+                "Lcom/oplus/ocs/camera/OplusBlurPreviewHelper;->segInit",
+                "sput-object",
+        )):
+            process_smali, data = candidate, candidate_data
+            break
+    if process_smali is None:
         process_smali, data = find_smali(
-            '/odm/etc/camera/singleblur/personseg.bin',
-            'Lcom/oplus/ocs/camera/OplusBlurPreviewHelper;->segInit',
-            'sput-object',
+            "/odm/etc/camera/singleblur/personseg.bin",
+            "Lcom/oplus/ocs/camera/OplusBlurPreviewHelper;->segInit",
+            "sput-object",
         )
     if process_smali is None:
         return
@@ -188,9 +195,9 @@ def blob_fixup_opluscamera_blur_seginit_guard(ctx, file, file_path, *args, tmp_d
         return
 
     fixed, count = re.subn(
-        r'(?s)(invoke-virtual/range \{v1 \.\. v7\}, Lcom/oplus/ocs/camera/OplusBlurPreviewHelper;->segInit\(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;II\)\[I.*?'
-        r'move-result-object v0.*?'
-        r'sput-object v0, L[^;]+;->w:\[I)',
+        r"(?s)(    invoke-virtual/range \{v1 \.\. v7\}, Lcom/oplus/ocs/camera/OplusBlurPreviewHelper;->segInit\(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;II\)\[I.*?"
+        r"    move-result-object v0.*?"
+        r"    sput-object v0, L[^;]+;->w:\[I)",
         r'\1'
         '\n\n'
         '    if-nez v0, :cond_codex_blur_seginit_ok\n'
@@ -275,21 +282,21 @@ def blob_fixup_opluscamera_aac_stereo(ctx, file, file_path, *args, tmp_dir=None,
     fixed = codec_data
     replacements = [
         (
-            r'(    :cond_4\n)'
-            r'(    invoke-static \{v8, v4, v5\}, Landroid/media/MediaFormat;->createAudioFormat\(Ljava/lang/String;II\)Landroid/media/MediaFormat;\n)',
-            r'\1    const/4 v5, 0x2\n\n\2',
+            r"(    :cond_4\n)"
+            r"(    invoke-static \{v\d+, v\d+, (?P<aac_ch1>v\d+)\}, Landroid/media/MediaFormat;->createAudioFormat\(Ljava/lang/String;II\)Landroid/media/MediaFormat;\n)",
+            r"\1    const/4 \g<aac_ch1>, 0x2\n\n\2",
         ),
         (
-            r'(    :cond_9\n'
-            r'    move-object/from16 v5, v21\n\n'
-            r'(?:    \.line \d+\n)+)'
-            r'(    invoke-static \{v5, v1, v4\}, Landroid/media/MediaFormat;->createAudioFormat\(Ljava/lang/String;II\)Landroid/media/MediaFormat;\n)',
-            r'\1    const/4 v4, 0x2\n\n\2',
+            r"(    :cond_9\n"
+            r"    move-object/from16 v\d+, v21\n\n"
+            r"(?:    \.line \d+\n)+)"
+            r"(    invoke-static \{v\d+, v1, (?P<aac_ch2>v\d+)\}, Landroid/media/MediaFormat;->createAudioFormat\(Ljava/lang/String;II\)Landroid/media/MediaFormat;\n)",
+            r"\1    const/4 \g<aac_ch2>, 0x2\n\n\2",
         ),
         (
-            r'(    :cond_d\n)'
-            r'(    invoke-static \{v5, v1, v2\}, Landroid/media/MediaFormat;->createAudioFormat\(Ljava/lang/String;II\)Landroid/media/MediaFormat;\n)',
-            r'\1    const/4 v2, 0x2\n\n\2',
+            r"(    :cond_d\n)"
+            r"(    invoke-static \{v\d+, v1, (?P<aac_ch3>v\d+)\}, Landroid/media/MediaFormat;->createAudioFormat\(Ljava/lang/String;II\)Landroid/media/MediaFormat;\n)",
+            r"\1    const/4 \g<aac_ch3>, 0x2\n\n\2",
         ),
     ]
 
@@ -633,30 +640,29 @@ def blob_fixup_opluscamera_third_party_gallery(ctx, file, file_path, *args, tmp_
 
     data = smali.read_text(encoding='utf-8', errors='ignore')
 
+    # Register allocation changes between OplusCamera releases. Match the
+    # gate by its call/signature and result flow instead of fixed registers.
     availability_pattern = (
-        r'(invoke-static \{v3, v2\}, Lcom/oplus/camera/util/Util;->u0\(Landroid/app/Activity;Ljava/lang/String;\)Z\n'
-        r'\n'
-        r'(?:    \.line \d+\n)+'
-        r'    move-result v3\n'
-        r'\n'
-        r'(?:    \.line \d+\n)+'
-        r'    const/4 v11, 0x0\n'
-        r'\n'
-        r'(?:    \.line \d+\n)+)'
-        r'    if-nez v3, :cond_0\n'
+        r"(invoke-static \{v\d+, v\d+\}, "
+        r"Lcom/oplus/camera/util/Util;->u0\(Landroid/app/Activity;Ljava/lang/String;\)Z\n"
+        r"(?:\n|    \.line \d+\n)*"
+        r"    move-result (?P<gallery_result>v\d+)\n"
+        r"(?:\n|    \.line \d+\n)*"
+        r"    const/4 v\d+, 0x0\n"
+        r"(?:\n|    \.line \d+\n)*)"
+        r"    if-nez (?P=gallery_result), :cond_0\n"
     )
     data, availability_count = re.subn(
         availability_pattern,
-        r'\1    goto :cond_0\n',
+        r"\1    goto :cond_0\n",
         data,
         count=1,
     )
     if availability_count != 1:
-        raise ValueError('OplusCamera gallery availability gate patch point not found')
+        raise ValueError("OplusCamera gallery availability gate patch point not found")
 
     q_body = (
         '    .locals 2\n'
-        '\n'
         '    new-instance v0, Landroid/content/Intent;\n'
         '\n'
         '    const-string v1, "android.intent.action.VIEW"\n'
